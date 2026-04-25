@@ -2,6 +2,8 @@
 
 A high-performance Spring Boot microservice that acts as a central API gateway and guardrail system for managing social media interactions. It uses Redis for real-time concurrency control and PostgreSQL as the persistent source of truth.
 
+> The application is fully stateless. All runtime control data such as counters, cooldowns, and notification queues are stored in Redis.
+
 ---
 
 ## Table of Contents
@@ -15,7 +17,7 @@ A high-performance Spring Boot microservice that acts as a central API gateway a
 - [API Endpoints](#api-endpoints)
 - [Redis Key Design](#redis-key-design)
 - [Thread Safety & Concurrency](#thread-safety--concurrency)
-- [Testing](#testing)
+- [Quick Test Guide](#quick-test-guide)
 - [Future Improvements](#future-improvements)
 - [Author](#author)
 
@@ -81,8 +83,8 @@ Each interaction increases the post's virality score stored in Redis:
 
 | Action | Points |
 |---|---|
-| Human Like | +20 |
-| Human Comment | +50 |
+| Like | +20 |
+| Comment | +50 |
 
 Redis Key: `post:{id}:virality_score`
 
@@ -103,20 +105,16 @@ Redis Key: `post:{id}:virality_score`
 ```
 guardrail-api-engine/
 │
-├── src/main/java/com/guardrail/
+├── src/main/java/com/priyansh/
+│   │
+│   ├── GuardrailApiEngineApplication.java
+│   │
+│   ├── config/
+│   │   └── RedisConfig.java
+│   │
 │   ├── controller/
 │   │   ├── PostController.java
 │   │   └── CommentController.java
-│   │
-│   ├── service/
-│   │   ├── PostService.java
-│   │   ├── CommentService.java
-│   │   ├── ViralityService.java
-│   │   ├── GuardrailService.java
-│   │   └── NotificationService.java
-│   │
-│   ├── scheduler/
-│   │   └── NotificationSweeper.java
 │   │
 │   ├── entity/
 │   │   ├── User.java
@@ -125,11 +123,14 @@ guardrail-api-engine/
 │   │   └── Comment.java
 │   │
 │   ├── repository/
+│   │   ├── UserRepository.java
 │   │   ├── PostRepository.java
 │   │   └── CommentRepository.java
 │   │
-│   └── config/
-│       └── RedisConfig.java
+│   └── service/
+│       ├── PostService.java
+│       ├── CommentService.java
+│       └── NotificationScheduler.java
 │
 ├── src/main/resources/
 │   └── application.properties
@@ -152,8 +153,8 @@ guardrail-api-engine/
 ### Step 1 — Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/guardrail-api-engine.git
-cd guardrail-api-engine
+git clone https://github.com/p-singhal-0011/Guardrail-api-engine.git
+cd Guardrail-api-engine
 ```
 
 ### Step 2 — Start PostgreSQL and Redis
@@ -176,6 +177,25 @@ The server starts at `http://localhost:8080`
 
 ---
 
+### application.properties
+
+```properties
+spring.application.name=Guardrail-api-engine
+
+# PostgreSQL
+spring.datasource.url=jdbc:postgresql://localhost:5432/GuardrailApi
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.jpa.properties.hibernate.jdbc.time_zone=Asia/Kolkata
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+
+# Redis
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+```
+
 ### docker-compose.yml
 
 ```yaml
@@ -184,9 +204,9 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: guardrail_db
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: GuardrailApi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
 
@@ -290,17 +310,19 @@ if (newCount > 100) {
 
 ---
 
-## Testing
+## Quick Test Guide
 
-### Run Concurrent Bot Spam Test (Postman)
+Follow these steps to verify all guardrails are working:
 
-Use Postman's **Collection Runner** with:
-- Iterations: 200
-- Delay: 0ms
-
-Expected result:
-- Exactly 100 comments saved in PostgreSQL
-- Remaining 100 requests receive `429 Too Many Requests`
+1. **Use predefined author IDs** (e.g., 1 as HUMAN, 2 as BOT) in the request payload
+2. **Create a Post** via `POST /api/posts`
+3. **Like the Post** via `POST /api/posts/{postId}/like`
+4. **Add BOT comments** using Postman Collection Runner (200 iterations, 0ms delay)
+5. Observe the results:
+   - First 100 comments → saved successfully in PostgreSQL
+   - Comments 101 to 200 → API returns `429 Too Many Requests`
+   - Redis `bot_count` = exactly 100
+   - Database contains exactly 100 bot comments
 
 ### Redis Verification Commands
 
@@ -332,9 +354,9 @@ LRANGE user:1:pending_notifs 0 -1
 
 ## Author
 
-**Priyansh Singhal**  
-Backend Engineer  
-[GitHub](https://github.com/your-username) • [LinkedIn](https://linkedin.com/in/your-profile)
+**Priyansh Singhal**
+Backend Engineer
+[GitHub](https://github.com/p-singhal-0011) • [LinkedIn](https://www.linkedin.com/in/priyanshsinghal1)
 
 ---
 
